@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Caccia ai Numeri Primi - Digital Board</title>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            text-align: center;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+            display: flex;
+            flex-direction: column;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+        .game-container {
+            width: 100%;
+            max-width: 1400px;
+            height: 100%;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-sizing: border-box;
+        }
+        .header {
+            flex-shrink: 0;
+            padding-bottom: 8px;
+        }
+        h1 {
+            font-size: 1.3rem;
+            margin: 0 0 5px 0;
+            color: #38bdf8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .stats-bar {
+            display: flex;
+            justify-content: space-between;
+            background: #1e293b;
+            padding: 8px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 1.1rem;
+            border: 1px solid #334155;
+        }
+        .stat-val {
+            color: #38bdf8;
+        }
+        .stat-time {
+            color: #ef4444;
+        }
+        .canvas-container {
+            flex-grow: 1;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #1e293b;
+            border-radius: 12px;
+            border: 2px solid #334155;
+            position: relative;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: #090d16;
+            border-radius: 10px;
+        }
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.95);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+        .overlay h2 {
+            font-size: 2.2rem;
+            color: #38bdf8;
+            margin: 0 0 15px 0;
+        }
+        .overlay p {
+            font-size: 1.1rem;
+            margin: 5px 0 20px 0;
+            color: #94a3b8;
+            max-width: 85%;
+        }
+        .btn-start {
+            background: #22c55e;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.3rem;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px #16a34a;
+        }
+        .btn-start:active {
+            transform: translateY(4px);
+            box-shadow: 0 0 #16a34a;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="game-container">
+        <div class="header">
+            <h1>Caccia ai Numeri Primi</h1>
+            <div class="stats-bar">
+                <div>Punti: <span id="lbl-punti" class="stat-val">0</span></div>
+                <div>Tempo: <span id="lbl-tempo" class="stat-time">60s</span></div>
+            </div>
+        </div>
+
+        <div class="canvas-container">
+            <canvas id="gameCanvas"></canvas>
+
+            <div id="schermata-start" class="overlay">
+                <h2>Pronti alla Sfida?</h2>
+                <p>Scoppia i <b>numeri composti</b> (+1 pt). Fai un <b>cerchio intorno ai primi</b> senza toccarli per catturarli (+3 pt alla fine se sono primi)! Se tocchi un primo scoppiandolo, perdi 1 punto.</p>
+                <button class="btn-start" onclick="iniziaGioco()">Inizia la Sfida</button>
+            </div>
+
+            <div id="schermata-fine" class="overlay" style="display: none;">
+                <h2 id="titolo-fine">Tempo Scaduto!</h2>
+                <p>Punteggio finale: <span id="punti-finali" style="color:#22c55e; font-weight:bold;">0</span></p>
+                <button class="btn-start" onclick="iniziaGioco()">Gioca Ancora</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        function ridimensionaCanvas() {
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+        }
+        window.addEventListener('resize', ridimensionaCanvas);
+        ridimensionaCanvas();
+
+        // --- SISTEMA AUDIO (Web Audio API) ---
+        let audioCtx = null;
+        let bgMusicInterval = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playSoundCoin() {
+            if (!audioCtx) return;
+            const now = audioCtx.currentTime;
+            const osc1 = audioCtx.createOscillator();
+            const osc2 = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+
+            osc1.type = 'square';
+            osc2.type = 'triangle';
+
+            osc1.frequency.setValueAtTime(987.77, now);
+            osc1.frequency.setValueAtTime(1318.51, now + 0.12);
+
+            osc2.frequency.setValueAtTime(493.88, now);
+            osc2.frequency.setValueAtTime(659.25, now + 0.12);
+
+            gain.gain.setValueAtTime(0.2, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+
+            osc1.connect(gain);
+            osc2.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            osc1.start(now);
+            osc2.start(now);
+            osc1.stop(now + 0.5);
+            osc2.stop(now + 0.5);
+        }
+
+        function playSoundBuzz() {
+            if (!audioCtx) return;
+            const now = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(150, now);
+            osc.frequency.linearRampToValueAtTime(80, now + 0.6);
+
+            gain.gain.setValueAtTime(0.3, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
+
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            osc.start(now);
+            osc.stop(now + 0.6);
+        }
+
+        function playSoundSuspense() {
+            if (!audioCtx) return;
+            const now = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(220, now);
+            osc.frequency.linearRampToValueAtTime(440, now + 1.2);
+
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.linearRampToValueAtTime(0.3, now + 1.2);
+
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            osc.start(now);
+            osc.stop(now + 1.2);
+        }
+
+        function playSoundFanfare() {
+            if (!audioCtx) return;
+            const now = audioCtx.currentTime;
+            const notes = [523.25, 659.25, 783.99, 1046.50];
+            notes.forEach((freq, idx) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+                gain.gain.setValueAtTime(0.25, now + idx * 0.12);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.12 + 0.4);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now + idx * 0.12);
+                osc.stop(now + idx * 0.12 + 0.4);
+            });
+        }
+
+        function playSoundQuaQua() {
+            if (!audioCtx) return;
+            const now = audioCtx.currentTime;
+            const notes = [311.13, 293.66, 277.18, 261.63]; 
+            const times = [0, 0.25, 0.5, 0.75];
+            const durations = [0.2, 0.2, 0.2, 0.8];
+
+            notes.forEach((freq, idx) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(freq, now + times[idx]);
+
+                if (idx === 3) {
+                    osc.frequency.linearRampToValueAtTime(230, now + times[idx] + durations[idx]);
+                }
+
+                gain.gain.setValueAtTime(0.25, now + times[idx]);
+                gain.gain.linearRampToValueAtTime(0.01, now + times[idx] + durations[idx]);
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.start(now + times[idx]);
+                osc.stop(now + times[idx] + durations[idx]);
+            });
+        }
+
+        function startBgMusic() {
+            stopBgMusic();
+            if (!audioCtx) return;
+            let noteIdx = 0;
+            const scale = [261.63, 293.66, 329.63, 349.23, 392.00, 440.00];
+            bgMusicInterval = setInterval(() => {
+                if (!giocoInCorso) return;
+                const now = audioCtx.currentTime;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'triangle'; // Usiamo triangle per renderla più dolce ma udibile
+                osc.frequency.setValueAtTime(scale[noteIdx % scale.length], now);
+                gain.gain.setValueAtTime(0.06, now); // Volume bilanciato
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.25);
+                noteIdx = (noteIdx + 1) % scale.length;
+            }, 350);
+        }
+
+        function stopBgMusic() {
+            if (bgMusicInterval) clearInterval(bgMusicInterval);
+        }
+
+        // --- STATO DEL GIOCO ---
+        let punti = 0;
+        let tempoResiduo = 60;
+        let timerInterval = null;
+        let giocoInCorso = false;
+        let palloncini = [];
+        let particelle = [];
+        let pallonciniCatturati = [];
+        let animFrame = null;
+        let spawnTimer = 0;
+
+        let faseVerificaFinale = false;
+        let indiceVerifica = 0;
+        let subFaseVerifica = 0;
+        let timerSubFase = 0;
+
+        let activeStrokes = {};
+
+        const numeriPrimiSet = new Set([2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97]);
+        const listaPrimi = Array.from(numeriPrimiSet);
+        const listaComposti = [];
+        for (let i = 2; i <= 100; i++) {
+            if (!numeriPrimiSet.has(i)) listaComposti.push(i);
+        }
+
+        const paletteColori = [
+            "#38bdf8", "#f43f5e", "#22c55e", "#eab308", 
+            "#a855f7", "#fb923c", "#ec4899", "#14b8a6", "#818cf8"
+        ];
+
+        function isPrimo(n) {
+            return numeriPrimiSet.has(n);
+        }
+
+        function scomponiFattori(n) {
+            let fattori = [];
+            let d = 2;
+            let temp = n;
+            while (temp > 1) {
+                if (temp % d === 0) {
+                    fattori.push(d);
+                    temp /= d;
+                } else {
+                    d++;
+                }
+            }
+            return fattori;
+        }
+
+        function iniziaGioco() {
+            initAudio();
+            punti = 0;
+            tempoResiduo = 60;
+            giocoInCorso = true;
+            faseVerificaFinale = false;
+            palloncini = [];
+            particelle = [];
+            pallonciniCatturati = [];
+            activeStrokes = {};
+            document.getElementById("lbl-punti").innerText = punti;
+            document.getElementById("lbl-tempo").innerText = tempoResiduo + "s";
+            document.getElementById("schermata-start").style.display = "none";
+            document.getElementById("schermata-fine").style.display = "none";
+
+            // Avvia la musica di sottofondo con un piccolo ritardo per sicurezza audio browser
+            setTimeout(() => {
+                if (giocoInCorso) startBgMusic();
+            }, 100);
+
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                tempoResiduo--;
+                document.getElementById("lbl-tempo").innerText = tempoResiduo + "s";
+                if (tempoResiduo <= 0) {
+                    avviaVerificaFinale();
+                }
+            }, 1000);
+
+            if (animFrame) cancelAnimationFrame(animFrame);
+            cicloGioco();
+        }
+
+        function avviaVerificaFinale() {
+            giocoInCorso = false;
+            stopBgMusic();
+            clearInterval(timerInterval);
+            
+            if (pallonciniCatturati.length === 0) {
+                terminaGioco();
+                return;
+            }
+
+            faseVerificaFinale = true;
+            indiceVerifica = 0;
+            subFaseVerifica = 0;
+            timerSubFase = 0;
+            playSoundSuspense();
+            document.getElementById("titolo-fine").innerText = "Gran Sfilata dei Primi...";
+        }
+
+        function terminaGioco() {
+            faseVerificaFinale = false;
+            stopBgMusic();
+            if (animFrame) cancelAnimationFrame(animFrame);
+            document.getElementById("titolo-fine").innerText = "Tempo Scaduto!";
+            document.getElementById("punti-finali").innerText = punti;
+            document.getElementById("schermata-fine").style.display = "flex";
+        }
+
+        function creaPalloncino() {
+            let numero;
+            if (Math.random() < 0.35) {
+                numero = listaPrimi[Math.floor(Math.random() * listaPrimi.length)];
+            } else {
+                numero = listaComposti[Math.floor(Math.random() * listaComposti.length)];
+            }
+
+            const raggio = 30;
+            const x = Math.random() * (canvas.width - 2 * raggio) + raggio;
+            const y = canvas.height + raggio;
+            const velocità = 1.0 + Math.random() * 1.3;
+            const primo = isPrimo(numero);
+            const coloreRandom = paletteColori[Math.floor(Math.random() * paletteColori.length)];
+
+            palloncini.push({
+                x: x,
+                y: y,
+                r: raggio,
+                numero: numero,
+                primo: primo,
+                vy: velocità,
+                colore: coloreRandom,
+                animFly: false
+            });
+        }
+
+        // --- GESTIONE TOUCH / MOUSE ---
+        canvas.addEventListener("touchstart", handleTouchStart, { passive: false });
+        canvas.addEventListener("touchmove", handleTouchMove, { passive: false });
+        canvas.addEventListener("touchend", handleTouchEnd, { passive: false });
+
+        canvas.addEventListener("mousedown", handleMouseDown);
+        canvas.addEventListener("mousemove", handleMouseMove);
+        canvas.addEventListener("mouseup", handleMouseUp);
+
+        function handleTouchStart(e) {
+            e.preventDefault();
+            if (!giocoInCorso) return;
+            const rect = canvas.getBoundingClientRect();
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const t = e.changedTouches[i];
+                activeStrokes[t.identifier] = [{ x: t.clientX - rect.left, y: t.clientY - rect.top }];
+            }
+        }
+
+        function handleTouchMove(e) {
+            e.preventDefault();
+            if (!giocoInCorso) return;
+            const rect = canvas.getBoundingClientRect();
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const t = e.changedTouches[i];
+                if (activeStrokes[t.identifier]) {
+                    activeStrokes[t.identifier].push({ x: t.clientX - rect.left, y: t.clientY - rect.top });
+                }
+            }
+        }
+
+        function handleTouchEnd(e) {
+            e.preventDefault();
+            if (!giocoInCorso) return;
+            const rect = canvas.getBoundingClientRect();
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const t = e.changedTouches[i];
+                const stroke = activeStrokes[t.identifier];
+                if (stroke) {
+                    valutaGesto(stroke, t.clientX - rect.left, t.clientY - rect.top);
+                    delete activeStrokes[t.identifier];
+                }
+            }
+        }
+
+        let mouseStroke = null;
+        let isMouseDown = false;
+
+        function handleMouseDown(e) {
+            if (!giocoInCorso) return;
+            const rect = canvas.getBoundingClientRect();
+            isMouseDown = true;
+            mouseStroke = [{ x: e.clientX - rect.left, y: e.clientY - rect.top }];
+        }
+
+        function handleMouseMove(e) {
+            if (!giocoInCorso || !isMouseDown) return;
+            const rect = canvas.getBoundingClientRect();
+            if (mouseStroke) {
+                mouseStroke.push({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+            }
+        }
+
+        function handleMouseUp(e) {
+            if (!giocoInCorso || !isMouseDown) return;
+            isMouseDown = false;
+            const rect = canvas.getBoundingClientRect();
+            if (mouseStroke) {
+                valutaGesto(mouseStroke, e.clientX - rect.left, e.clientY - rect.top);
+                mouseStroke = null;
+            }
+        }
+
+        function isPointInPolygon(pt, polygon) {
+            let x = pt.x, y = pt.y;
+            let inside = false;
+            for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+                let xi = polygon[i].x, yi = polygon[i].y;
+                let xj = polygon[j].x, yj = polygon[j].y;
+                let intersect = ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+                if (intersect) inside = !inside;
+            }
+            return inside;
+        }
+
+        function valutaGesto(stroke, lastX, lastY) {
+            if (stroke.length < 5) {
+                verificaImpatto(lastX, lastY);
+                return;
+            }
+
+            let lunghezza = 0;
+            for (let i = 1; i < stroke.length; i++) {
+                lunghezza += Math.hypot(stroke[i].x - stroke[i-1].x, stroke[i].y - stroke[i-1].y);
+            }
+
+            if (lunghezza < 80) {
+                verificaImpatto(lastX, lastY);
+                return;
+            }
+
+            let catturato = false;
+            for (let i = palloncini.length - 1; i >= 0; i--) {
+                let p = palloncini[i];
+                if (p.animFly) continue;
+
+                let centro = { x: p.x, y: p.y };
+                let dentro = isPointInPolygon(centro, stroke);
+
+                let haToccato = false;
+                for (let pt of stroke) {
+                    if (Math.hypot(pt.x - p.x, pt.y - p.y) <= p.r) {
+                        haToccato = true;
+                        break;
+                    }
+                }
+
+                if (dentro && !haToccato) {
+                    p.animFly = true;
+                    pallonciniCatturati.push(p);
+                    palloncini.splice(i, 1);
+                    catturato = true;
+                    break;
+                }
+            }
+
+            if (!catturato) {
+                verificaImpatto(lastX, lastY);
+            }
+        }
+
+        function verificaImpatto(px, py) {
+            for (let i = palloncini.length - 1; i >= 0; i--) {
+                let p = palloncini[i];
+                if (p.animFly) continue;
+                let dist = Math.hypot(p.x - px, p.y - py);
+                if (dist < p.r + 10) {
+                    if (!p.primo) {
+                        punti++;
+                        playSoundCoin();
+                        creaFrammenti(p.x, p.y, p.numero);
+                    } else {
+                        punti--;
+                        playSoundBuzz();
+                    }
+                    document.getElementById("lbl-punti").innerText = punti;
+                    palloncini.splice(i, 1);
+                    break;
+                }
+            }
+        }
+
+        function creaFrammenti(x, y, numero) {
+            const fattori = scomponiFattori(numero);
+            fattori.forEach((f, index) => {
+                let angolo = (Math.PI * 2 / fattori.length) * index;
+                particelle.push({
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angolo) * 3.5,
+                    vy: Math.sin(angolo) * 3.5 - 2,
+                    testo: f,
+                    alpha: 1.0
+                });
+            });
+        }
+
+        function cicloGioco() {
+            if (!giocoInCorso && !faseVerificaFinale) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (giocoInCorso) {
+                spawnTimer++;
+                if (spawnTimer > 45) {
+                    creaPalloncino();
+                    spawnTimer = 0;
+                }
+
+                for (let i = palloncini.length - 1; i >= 0; i--) {
+                    let p = palloncini[i];
+                    p.y -= p.vy;
+
+                    if (p.y + p.r < 0) {
+                        palloncini.splice(i, 1);
+                        continue;
+                    }
+                }
+            }
+
+            // --- FASE 2: GRAN SFILATA CON VERIFICA FINALE ---
+            if (faseVerificaFinale) {
+                timerSubFase++;
+
+                if (subFaseVerifica === 0) {
+                    if (timerSubFase > 70) {
+                        subFaseVerifica = 1;
+                        timerSubFase = 0;
+
+                        let pc = pallonciniCatturati[indiceVerifica];
+                        if (pc.primo) {
+                            punti += 3;
+                            playSoundFanfare();
+                        } else {
+                            playSoundQuaQua();
+                            creaFrammenti(canvas.width / 2, canvas.height / 2 + 30, pc.numero);
+                        }
+                        document.getElementById("lbl-punti").innerText = punti;
+                    }
+                } else if (subFaseVerifica === 1) {
+                    if (timerSubFase > 90) {
+                        indiceVerifica++;
+                        subFaseVerifica = 0;
+                        timerSubFase = 0;
+
+                        if (indiceVerifica >= pallonciniCatturati.length) {
+                            terminaGioco();
+                            return;
+                        } else {
+                            playSoundSuspense();
+                        }
+                    }
+                }
+            }
+
+            // Area di accumulo in alto
+            ctx.fillStyle = "rgba(30, 41, 59, 0.6)";
+            ctx.fillRect(10, 10, canvas.width - 20, 60);
+            ctx.strokeStyle = "#334155";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(10, 10, canvas.width - 20, 60);
+
+            ctx.fillStyle = "#94a3b8";
+            ctx.font = "bold 14px sans-serif";
+            ctx.textAlign = "left";
+            ctx.fillText("AREA ACCUMULO (Palloncini Catturati):", 25, 45);
+
+            let startXAcc = 320;
+            pallonciniCatturati.forEach((pc, idx) => {
+                let posX = startXAcc + (idx * 45);
+                let posY = 40;
+                if (posX > canvas.width - 40) posX = canvas.width - 40;
+
+                if (faseVerificaFinale && idx === indiceVerifica) {
+                    ctx.beginPath();
+                    ctx.arc(posX, posY, 22, 0, Math.PI * 2);
+                    ctx.fillStyle = "#fbbf24";
+                    ctx.fill();
+                }
+
+                ctx.beginPath();
+                ctx.arc(posX, posY, 18, 0, Math.PI * 2);
+                ctx.fillStyle = pc.colore;
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = "#ffffff";
+                ctx.stroke();
+
+                ctx.fillStyle = "#ffffff";
+                ctx.font = "bold 12px sans-serif";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(pc.numero, posX, posY);
+            });
+
+            // SFILATA SULLO SCHERMO PRINCIPALE
+            if (faseVerificaFinale && indiceVerifica < pallonciniCatturati.length) {
+                let pc = pallonciniCatturati[indiceVerifica];
+                let gX = canvas.width / 2;
+                let gY = canvas.height / 2 + 30;
+                let gRaggio = 100;
+
+                if (subFaseVerifica === 0 || pc.primo) {
+                    ctx.beginPath();
+                    ctx.arc(gX, gY, gRaggio + 14, 0, Math.PI * 2);
+                    ctx.fillStyle = subFaseVerifica === 1 ? (pc.primo ? "rgba(34, 197, 94, 0.4)" : "rgba(244, 63, 94, 0.4)") : "rgba(251, 191, 36, 0.3)";
+                    ctx.fill();
+
+                    ctx.beginPath();
+                    ctx.arc(gX, gY, gRaggio, 0, Math.PI * 2);
+                    ctx.fillStyle = pc.colore;
+                    ctx.fill();
+                    ctx.lineWidth = 6;
+                    ctx.strokeStyle = "#ffffff";
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.moveTo(gX - 15, gY + gRaggio);
+                    ctx.lineTo(gX + 15, gY + gRaggio);
+                    ctx.lineTo(gX, gY + gRaggio + 22);
+                    ctx.closePath();
+                    ctx.fillStyle = pc.colore;
+                    ctx.fill();
+
+                    ctx.fillStyle = "#ffffff";
+                    ctx.font = "bold 64px sans-serif";
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    ctx.fillText(pc.numero, gX, gY);
+                }
+
+                if (subFaseVerifica === 1) {
+                    ctx.font = "bold 32px sans-serif";
+                    ctx.fillStyle = pc.primo ? "#22c55e" : "#f43f5e";
+                    ctx.fillText(pc.primo ? "NUMERO PRIMO! (+3)" : "COMPOSTO! (0 pt)", gX, gY + gRaggio + 65);
+                }
+            }
+
+            // Disegna palloncini attivi di gioco
+            for (let p of palloncini) {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                ctx.fillStyle = p.colore;
+                ctx.fill();
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = "#ffffff";
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(p.x - 5, p.y + p.r);
+                ctx.lineTo(p.x + 5, p.y + p.r);
+                ctx.lineTo(p.x, p.y + p.r + 8);
+                ctx.closePath();
+                ctx.fillStyle = p.colore;
+                ctx.fill();
+
+                ctx.fillStyle = "#ffffff";
+                ctx.font = "bold 18px sans-serif";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(p.numero, p.x, p.y);
+            }
+
+            // Tratti dei cerchi
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = "#38bdf8";
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+
+            for (let id in activeStrokes) {
+                let stroke = activeStrokes[id];
+                if (stroke.length > 1) {
+                    ctx.beginPath();
+                    ctx.moveTo(stroke[0].x, stroke[0].y);
+                    for (let pt of stroke) ctx.lineTo(pt.x, pt.y);
+                    ctx.stroke();
+                }
+            }
+
+            if (mouseStroke && mouseStroke.length > 1) {
+                ctx.beginPath();
+                ctx.moveTo(mouseStroke[0].x, mouseStroke[0].y);
+                for (let pt of mouseStroke) ctx.lineTo(pt.x, pt.y);
+                ctx.stroke();
+            }
+
+            // Particelle
+            for (let i = particelle.length - 1; i >= 0; i--) {
+                let pt = particelle[i];
+                pt.x += pt.vx;
+                pt.y += pt.vy;
+                pt.alpha -= 0.015;
+
+                if (pt.alpha <= 0) {
+                    particelle.splice(i, 1);
+                    continue;
+                }
+
+                ctx.save();
+                ctx.globalAlpha = pt.alpha;
+                ctx.fillStyle = "#fbbf24";
+                ctx.font = "bold 24px sans-serif";
+                ctx.textAlign = "center";
+                ctx.fillText(pt.testo, pt.x, pt.y);
+                ctx.restore();
+            }
+
+            animFrame = requestAnimationFrame(cicloGioco);
+        }
+    </script>
+</body>
+</html>
