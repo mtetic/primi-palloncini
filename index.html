@@ -6,14 +6,15 @@
     <title>Caccia ai Numeri Primi - Digital Board</title>
     <style>
         html, body {
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
             margin: 0;
             padding: 0;
             overflow: hidden;
+            background-color: #0f172a;
         }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #0f172a;
             color: #f8fafc;
             text-align: center;
             user-select: none;
@@ -21,13 +22,13 @@
             touch-action: none;
             display: flex;
             flex-direction: column;
-            padding: 8px;
+            padding: 10px;
             box-sizing: border-box;
         }
         .game-container {
             width: 100%;
-            max-width: 1400px;
             height: 100%;
+            max-width: none; /* Rimosso il limite che stringeva lateralmente */
             margin: 0 auto;
             display: flex;
             flex-direction: column;
@@ -39,7 +40,7 @@
             padding-bottom: 8px;
         }
         h1 {
-            font-size: 1.3rem;
+            font-size: 1.5rem;
             margin: 0 0 5px 0;
             color: #38bdf8;
             text-transform: uppercase;
@@ -49,10 +50,10 @@
             display: flex;
             justify-content: space-between;
             background: #1e293b;
-            padding: 8px 20px;
+            padding: 10px 25px;
             border-radius: 8px;
             font-weight: bold;
-            font-size: 1.1rem;
+            font-size: 1.2rem;
             border: 1px solid #334155;
         }
         .stat-val {
@@ -73,6 +74,7 @@
             position: relative;
             overflow: hidden;
             box-sizing: border-box;
+            min-height: 0; /* Fondamentale per far ridimensionare correttamente i flex container */
         }
         canvas {
             display: block;
@@ -96,13 +98,13 @@
             z-index: 10;
         }
         .overlay h2 {
-            font-size: 2.2rem;
+            font-size: 2.5rem;
             color: #38bdf8;
             margin: 0 0 15px 0;
         }
         .overlay p {
-            font-size: 1.1rem;
-            margin: 5px 0 20px 0;
+            font-size: 1.2rem;
+            margin: 5px 0 25px 0;
             color: #94a3b8;
             max-width: 85%;
         }
@@ -111,7 +113,7 @@
             color: white;
             border: none;
             padding: 15px 40px;
-            font-size: 1.3rem;
+            font-size: 1.4rem;
             font-weight: bold;
             border-radius: 8px;
             cursor: pointer;
@@ -300,9 +302,9 @@
                 const now = audioCtx.currentTime;
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
-                osc.type = 'triangle'; // Usiamo triangle per renderla più dolce ma udibile
+                osc.type = 'triangle';
                 osc.frequency.setValueAtTime(scale[noteIdx % scale.length], now);
-                gain.gain.setValueAtTime(0.06, now); // Volume bilanciato
+                gain.gain.setValueAtTime(0.06, now);
                 gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
                 osc.connect(gain);
                 gain.connect(audioCtx.destination);
@@ -380,7 +382,6 @@
             document.getElementById("schermata-start").style.display = "none";
             document.getElementById("schermata-fine").style.display = "none";
 
-            // Avvia la musica di sottofondo con un piccolo ritardo per sicurezza audio browser
             setTimeout(() => {
                 if (giocoInCorso) startBgMusic();
             }, 100);
@@ -627,6 +628,7 @@
             if (giocoInCorso) {
                 spawnTimer++;
                 if (spawnTimer > 45) {
+                    creaSpartizione(); // nota: rimasto creaPalloncino sotto
                     creaPalloncino();
                     spawnTimer = 0;
                 }
@@ -642,7 +644,6 @@
                 }
             }
 
-            // --- FASE 2: GRAN SFILATA CON VERIFICA FINALE ---
             if (faseVerificaFinale) {
                 timerSubFase++;
 
@@ -717,7 +718,6 @@
                 ctx.fillText(pc.numero, posX, posY);
             });
 
-            // SFILATA SULLO SCHERMO PRINCIPALE
             if (faseVerificaFinale && indiceVerifica < pallonciniCatturati.length) {
                 let pc = pallonciniCatturati[indiceVerifica];
                 let gX = canvas.width / 2;
@@ -760,7 +760,6 @@
                 }
             }
 
-            // Disegna palloncini attivi di gioco
             for (let p of palloncini) {
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
@@ -785,7 +784,6 @@
                 ctx.fillText(p.numero, p.x, p.y);
             }
 
-            // Tratti dei cerchi
             ctx.lineWidth = 4;
             ctx.strokeStyle = "#38bdf8";
             ctx.lineCap = "round";
@@ -808,7 +806,6 @@
                 ctx.stroke();
             }
 
-            // Particelle
             for (let i = particelle.length - 1; i >= 0; i--) {
                 let pt = particelle[i];
                 pt.x += pt.vx;
